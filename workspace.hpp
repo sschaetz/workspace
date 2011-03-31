@@ -24,16 +24,16 @@ class workspace
   public:
 
     template <typename ArgType>
-    struct argument
+    struct special_arg
     {
-      argument(const ArgType & arg) : arg_(arg) {}
+      special_arg(const ArgType & arg) : arg_(arg) {}
       ArgType arg_;
     };
 
     template <typename ArgType>
-    static argument<ArgType> make_argument(const ArgType & arg)
+    static special_arg<ArgType> arg(const ArgType & arg)
     {
-      return argument<ArgType>(arg);
+      return special_arg<ArgType>(arg);
     }
 
   private:
@@ -43,7 +43,7 @@ class workspace
      */
     struct entry
     {
-      // number, ensure destructio in reverse order of construction
+      // number, ensure destruction in reverse order of construction
       unsigned int num_;
       // pointer to object
       void * ptr_;
@@ -162,7 +162,7 @@ class workspace
     inline void param_size(std::size_t & size) {}
 
     template<typename T, typename... Args>
-    inline void param_size(std::size_t & size, argument<T> param, Args... args)
+    inline void param_size(std::size_t & size, special_arg<T> param, Args... args)
     {
       size += sizeof(T);
       param_size(size, args...);
@@ -179,7 +179,7 @@ class workspace
     inline void param_append(std::string & str) {}
 
     template<typename T, typename... Args>
-    inline void param_append(std::string & str, argument<T> param, Args... args)
+    inline void param_append(std::string & str, special_arg<T> param, Args... args)
     {
       str.append((const char *)&param, sizeof(T));
       param_append(str, args...);
@@ -203,9 +203,9 @@ class workspace
     };
 
     template <typename T>
-    struct unwrap_argument<argument<T> >
+    struct unwrap_argument<special_arg<T> >
     {
-      inline T operator() (argument<T> val)
+      inline T operator() (special_arg<T> val)
       {
         return val.arg_;
       }

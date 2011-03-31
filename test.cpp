@@ -58,10 +58,10 @@ void workspace_test_arg()
   {
     workspace ws;
     int i = 1;
-    dummy & dummy1 = ws.get<dummy>("dummy1", workspace::make_argument(i), 2);
+    dummy & dummy1 = ws.get<dummy>("dummy1", workspace::arg(i), 2);
 
     // get the same object
-    dummy & dummy2 = ws.get<dummy>("dummy1", workspace::argument<int>(i), 2);
+    dummy & dummy2 = ws.get<dummy>("dummy1", workspace::arg<int>(i), 2);
     BOOST_TEST_EQ(&dummy1.a_, &dummy2.a_);
 
     // get a different object
@@ -73,7 +73,7 @@ void workspace_test_arg()
     BOOST_TEST(&dummy1.a_ != &dummy4.a_);
 
     // get dummy 1
-    dummy & dummy5 = ws.get<dummy>("dummy1", workspace::argument<int>(1), 2);
+    dummy & dummy5 = ws.get<dummy>("dummy1", workspace::arg<int>(1), 2);
     BOOST_TEST_EQ(&dummy1.a_, &dummy5.a_);
   }
   // we expect the created objects to be destroyed
