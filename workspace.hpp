@@ -10,13 +10,8 @@
 
 #include <map>
 #include <vector>
-
-#include <boost/function.hpp>
-#include <boost/lambda/lambda.hpp>
-#include <boost/lambda/casts.hpp>
-#include <boost/lambda/construct.hpp>
-#include <boost/lambda/bind.hpp>
-
+#include <functional>
+#include <string>
 
 /**
  * @brief workspace class that optimizes resource management across consecutive
@@ -26,6 +21,21 @@
  */
 class workspace
 {
+  public:
+
+    template <typename ArgType>
+    struct argument
+    {
+      argument(const ArgType & arg) : arg_(arg) {}
+      ArgType arg_;
+    };
+
+    template <typename ArgType>
+    static argument<ArgType> make_argument(const ArgType & arg)
+    {
+      return argument<ArgType>(arg);
+    }
+
   private:
 
     /**
@@ -33,28 +43,27 @@ class workspace
      */
     struct entry
     {
+      // number, ensure destructio in reverse order of construction
       unsigned int num_;
-
+      // pointer to object
       void * ptr_;
+      // function that can properly destroy the object
+      std::function<void (void *&)> dtor_;
 
-      boost::function<void (void * ptr)> dtor_;
-
-      entry(void * ptr, boost::function<void (void * ptr)> dtor,
-        unsigned int num) :
-        num_(num), ptr_(ptr), dtor_(dtor)
-      {}
+      // class constructor
+      entry(void * ptr, std::function<void (void *&)> dtor, unsigned int num) :
+        num_(num), ptr_(ptr), dtor_(dtor) {}
     };
 
-    typedef std::pair<std::string, entry> data_entry_type;
-    typedef std::map<std::string, entry> data_type;
-    typedef data_type::iterator data_iterator_type;
+    typedef std::pair<std::string, entry> map_entry_type;
+    typedef std::map<std::string, entry> map_type;
+    typedef map_type::iterator map_iterator_type;
 
     /// specifies if workspace should be used at all
     bool use_;
 
     /// the workspace data
-    data_type data;
-
+    map_type storage;
 
   public:
 
@@ -77,15 +86,15 @@ class workspace
      */
     ~workspace()
     {
-      data_iterator_type it;
+      map_iterator_type it;
       // destroy sorted
-      std::vector<data_iterator_type> buffer(data.size());
-      for(it = data.begin(); it!=data.end(); ++it)
+      std::vector<map_iterator_type> buffer(storage.size());
+      for(it = storage.begin(); it!=storage.end(); ++it)
       {
-        buffer[data.size()-it->second.num_ -1] = it;
+        buffer[storage.size()-it->second.num_ -1] = it;
       }
 
-      std::vector<data_iterator_type>::iterator i;
+      std::vector<map_iterator_type>::iterator i;
       for(i = buffer.begin(); i!=buffer.end(); ++i)
       {
         (*i)->second.dtor_((*i)->second.ptr_);
@@ -105,81 +114,103 @@ class workspace
      *
      * @param name name of element
      */
-    template<typename T>
-    T & get(const std::string & name)
+    template<typename T, typename... Args>
+    T & get(std::string name, const Args&... args)
     {
-      data_iterator_type it = data.find(name);
-      if(it == data.end())
+      // reserve space in the string to speed up append operation
+      std::size_t size = name.size();
+      param_size(size, args...);
+      name.reserve(size);
+
+      // append each parameter that was passes as argument to the string
+      param_append(name, args...);
+
+      // check if we already have this object
+      map_iterator_type it = storage.find(name);
+      if(it == storage.end())
       {
-        T* ptr = new T();
-        boost::function<void (void * ptr)> dtor =
-          boost::lambda::bind(boost::lambda::delete_ptr(),
-            boost::lambda::ll_reinterpret_cast<T*>(boost::lambda::_1));
-        data.insert(data_entry_type(name, entry(ptr, dtor, data.size())));
+        // we don't have the object, create a new one
+        T* ptr = new T( unwrap_argument<Args>()(args)... );
+
+        // and insert it into the map
+        storage.insert(
+          map_entry_type(
+            name,
+            entry(
+              ptr,
+              [](void *& ptr){ delete reinterpret_cast<T*>(ptr); },
+              storage.size()
+            )
+          )
+        );
+        // finally return the created object as reference
         return *ptr;
       }
       else
       {
+        // we have the object already, return as reference
         return *((T*)(it->second.ptr_));
       }
     }
 
-    template<typename T, typename T0>
-    T & get(const std::string & name, T0 p0)
+
+
+  private:
+
+    // deduce size of all arguments ____________________________________________
+
+    inline void param_size(std::size_t & size) {}
+
+    template<typename T, typename... Args>
+    inline void param_size(std::size_t & size, argument<T> param, Args... args)
     {
-      data_iterator_type it = data.find(name);
-      if(it == data.end())
-      {
-        T* ptr = new T(p0);
-        boost::function<void (void * ptr)> dtor =
-          boost::lambda::bind(boost::lambda::delete_ptr(),
-            boost::lambda::ll_reinterpret_cast<T*>(boost::lambda::_1));
-        data.insert(data_entry_type(name, entry(ptr, dtor, data.size())));
-        return *ptr;
-      }
-      else
-      {
-        return *((T*)(it->second.ptr_));
-      }
+      size += sizeof(T);
+      param_size(size, args...);
     }
 
-    template<typename T, typename T0, typename T1>
-    T & get(const std::string & name, T0 p0, T1 p1)
+    template<typename T, typename... Args>
+    inline void param_size(std::size_t & size, T param, Args... args)
     {
-      data_iterator_type it = data.find(name);
-      if(it == data.end())
-      {
-        T* ptr = new T(p0, p1);
-        boost::function<void (void * ptr)> dtor =
-          boost::lambda::bind(boost::lambda::delete_ptr(),
-            boost::lambda::ll_reinterpret_cast<T*>(boost::lambda::_1));
-        data.insert(data_entry_type(name, entry(ptr, dtor, data.size())));
-        return *ptr;
-      }
-      else
-      {
-        return *((T*)(it->second.ptr_));
-      }
+      param_size(size, args...);
     }
 
-    template<typename T, typename T0, typename T1, typename T2>
-    T & get(const std::string & name, T0 p0, T1 p1, T2 p2)
+    // create string from arguments for insertion in hash ______________________
+
+    inline void param_append(std::string & str) {}
+
+    template<typename T, typename... Args>
+    inline void param_append(std::string & str, argument<T> param, Args... args)
     {
-      data_iterator_type it = data.find(name);
-      if(it == data.end())
-      {
-        T* ptr = new T(p0, p1, p2);
-        boost::function<void (void * ptr)> dtor =
-          boost::lambda::bind(boost::lambda::delete_ptr(),
-            boost::lambda::ll_reinterpret_cast<T*>(boost::lambda::_1));
-        data.insert(data_entry_type(name, entry(ptr, dtor, data.size())));
-        return *ptr;
-      }
-      else
-      {
-        return *((T*)(it->second.ptr_));
-      }
+      str.append((const char *)&param, sizeof(T));
+      param_append(str, args...);
     }
+
+    template<typename T, typename... Args>
+    inline void param_append(std::string & str, T param, Args... args)
+    {
+      param_append(str, args...);
+    }
+
+    // unwrap passed arguments _________________________________________________
+
+    template <typename T>
+    struct unwrap_argument
+    {
+      inline T operator() (T val)
+      {
+        return val;
+      }
+    };
+
+    template <typename T>
+    struct unwrap_argument<argument<T> >
+    {
+      inline T operator() (argument<T> val)
+      {
+        return val.arg_;
+      }
+    };
+
 };
 
 
