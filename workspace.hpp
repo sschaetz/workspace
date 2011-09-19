@@ -162,7 +162,8 @@ class workspace
     inline void param_size(std::size_t & size) {}
 
     template<typename T, typename... Args>
-    inline void param_size(std::size_t & size, special_arg<T> param, Args... args)
+    inline void param_size(std::size_t & size, special_arg<T> param,
+      Args... args)
     {
       size += sizeof(T);
       param_size(size, args...);
@@ -179,7 +180,8 @@ class workspace
     inline void param_append(std::string & str) {}
 
     template<typename T, typename... Args>
-    inline void param_append(std::string & str, special_arg<T> param, Args... args)
+    inline void param_append(std::string & str, special_arg<T> param,
+      Args... args)
     {
       str.append((const char *)&param, sizeof(T));
       param_append(str, args...);
